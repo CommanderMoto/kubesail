@@ -1,0 +1,167 @@
+kind: Deployment
+metadata:
+  name: photostructure
+  labels:
+    app: photostructure
+  annotations:
+    kubesailEditorUid: 4faddeec-ae22-46e7-b26e-a85426ab136f
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: apps/v1
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: photostructure
+  template:
+    metadata:
+      labels:
+        app: photostructure
+    spec:
+      containers:
+        - name: photostructure
+          image: photostructure/server:v2.1.0-alpha.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          ports:
+            - name: http
+              containerPort: 1787
+          volumeMounts:
+            - mountPath: /ps/library
+              name: photos
+            - mountPath: /ps/tmp
+              name: photostructure
+              subPath: tmp
+            - mountPath: /ps/config
+              name: photostructure
+              subPath: config
+            - mountPath: /ps/logs
+              name: photostructure
+              subPath: logs
+      volumes:
+        - name: photos
+          persistentVolumeClaim:
+            claimName: photos
+        - name: photostructure
+          persistentVolumeClaim:
+            claimName: photostructure
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: photostructure-auth
+  annotations:
+    kubesailEditorUid: 1da2ca68-364d-4499-a38b-2f8fc08caf49
+    kubesail.com/template: erulabs/photostructure:v31
+spec:
+  basicAuth:
+    secret: photostructure-auth
+---
+kind: Ingress
+metadata:
+  name: photostructure
+  labels:
+    app: photostructure
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/auth-secret: photostructure-auth
+    ingress.kubernetes.io/auth-realm: Photostructure Login
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ NAMESPACE }}-photostructure-auth@kubernetescrd"
+    kubernetes.io/tls-acme: "true"
+    kubesailEditorUid: 30e719db-e91b-4f67-95eb-3bbb7a0c8f06
+    kubesail.com/template: erulabs/photostructure:v31
+    kubesail.com/templateVersion: "28"
+apiVersion: networking.k8s.io/v1
+spec:
+  tls:
+    - hosts:
+        - photostructure.{{ CLUSTER_ADDRESS }}
+  rules:
+    - host: photostructure.{{ CLUSTER_ADDRESS }}
+      http:
+        paths:
+          - pathType: ImplementationSpecific
+            backend:
+              service:
+                name: photostructure
+                port:
+                  name: http
+---
+kind: PersistentVolumeClaim
+metadata:
+  name: photos
+  labels:
+    app: photos
+  annotations:
+    kubesailEditorUid: 17383dc9-4523-4d2f-b690-1711388bb337
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: v1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+kind: PersistentVolumeClaim
+metadata:
+  name: photostructure
+  labels:
+    app: photostructure
+  annotations:
+    kubesailEditorUid: 17383dc9-4523-4d2f-b690-1711388bb332
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: v1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+kind: Secret
+metadata:
+  name: photostructure-auth
+  labels:
+    app: photostructure
+  annotations:
+    kubesailEditorUid: 060188fb-4f73-4a5f-b7ae-fe4d4ab2efd1
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: v1
+data:
+  auth: "{{ HTACCESS_AUTH() }}"
+---
+kind: Secret
+metadata:
+  name: photostructure-authdata
+  labels:
+    app: photostructure
+  annotations:
+    kubesailEditorUid: 060188fb-4f73-4a5f-b7ae-fe4d4ab2efd2
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: v1
+data:
+  username: "{{ HTACCESS_USERNAME }}"
+  password: "{{ HTACCESS_PASSWORD }}"
+---
+kind: Service
+metadata:
+  name: photostructure
+  labels:
+    app: photostructure
+  annotations:
+    kubesailEditorUid: 6ddcefe8-2b31-4c43-9d9a-67cb12a3fec1
+    kubesail.com/template: erulabs/photostructure:v31
+apiVersion: v1
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 1787
+      targetPort: http
+  selector:
+    app: photostructure
